@@ -27,7 +27,7 @@ import os
 import logging
 import unittest
 from decimal import Decimal
-from service.models import Product, Category, db
+from service.models import Product, Category, db, DataValidationError
 from service import app
 from tests.factories import ProductFactory
 
@@ -133,6 +133,78 @@ class TestProductModel(unittest.TestCase):
         self.assertEqual(len(products), 1)
         self.assertEqual(products[0].id, id_org)
         self.assertEqual(products[0].description, description_org)
+
+    def test_update_product_without_id(self):
+        """Test updating a product with empty ID raises DataValidationError"""
+        product = ProductFactory()
+        product.id = None  # Ensuring the ID is None
+        self.assertRaises(DataValidationError, product.update)
+
+    def test_deserialize_product(self):
+        """Test deserializing a product"""
+        product = Product()
+        data = {
+            "name": "Test Product",
+            "description": "This is a test product",
+            "price": "19.99",
+            "available": True,
+            "category": "FOOD"
+        }
+        product.deserialize(data)
+        self.assertEqual(product.name, data["name"])
+        self.assertEqual(product.description, data["description"])
+        self.assertEqual(product.price, Decimal(data["price"]))
+        self.assertEqual(product.available, data["available"])
+        self.assertEqual(product.category, Category.FOOD)
+
+    def test_deserialize_invalid_boolean(self):
+        """Test deserializing a product with an invalid boolean raises DataValidationError"""
+        product = Product()
+        data = {
+            "name": "Test Product",
+            "description": "This is a test product",
+            "price": 19.99,
+            "available": "yes",  # Invalid boolean
+            "category": "FOOD"
+        }
+        with self.assertRaises(DataValidationError) as context:
+            product.deserialize(data)
+        self.assertTrue("Invalid type for boolean [available]" in str(context.exception))
+
+    def test_deserialize_missing_key(self):
+        """Test deserializing a product with a missing key raises DataValidationError"""
+        product = Product()
+        data = {
+            "name": "Test Product",
+            "description": "This is a test product",
+            "available": True,
+            "category": "FOOD"
+        }
+        with self.assertRaises(DataValidationError) as context:
+            product.deserialize(data)
+        self.assertTrue("Invalid product: missing price" in str(context.exception))
+
+    def test_deserialize_faulty_attribute(self):
+        """Test deserializing a product with a faulty attribute raises DataValidationError"""
+        product = Product()
+        data = {
+            "name": "Test Product",
+            "description": "This is a test product",
+            "price": 19.99,
+            "available": True,  # Invalid boolean
+            "category": "BLAB"
+        }
+        with self.assertRaises(DataValidationError) as context:
+            product.deserialize(data)
+        self.assertTrue("Invalid attribute: " in str(context.exception))
+
+    def test_deserialize_faulty_type(self):
+        """Test deserializing a product with a faulty type raises DataValidationError"""
+        product = Product()
+        data = None
+        with self.assertRaises(DataValidationError) as context:
+            product.deserialize(data)
+        self.assertTrue("Invalid product: body of request contained bad or no data " in str(context.exception))
 
     def test_delete_product(self):
         """Test deleting a product"""
